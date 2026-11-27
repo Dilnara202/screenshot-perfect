@@ -1,0 +1,2 @@
+CREATE OR REPLACE FUNCTION public.create_signup_profile() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ BEGIN INSERT INTO public.profiles(id, laboratory_name) VALUES (new.id, coalesce(trim(new.raw_user_meta_data->>'laboratory_name'), 'Лаборатория')); RETURN new; END; $$;
+REVOKE EXECUTE ON FUNCTION public.create_signup_profile() FROM PUBLIC, anon, authenticated;

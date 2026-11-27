@@ -8,6 +8,13 @@
       "when": 1795796980979,
       "tag": "0000_user_profiles_measurements",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795797174376,
+      "tag": "0001_profile_admin_creation_fallback",
+      "breakpoints": true
     }
   ]
 }

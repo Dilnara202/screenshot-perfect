@@ -107,7 +107,7 @@ export function Dashboard({ initialAuth = false }: { initialAuth?: boolean }) {
       </header>
 
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2">
-        <div className="flex flex-col gap-6">
+         <div className="flex min-w-0 flex-col gap-6">
           <MeasureForm
              key={user?.id ?? "guest"}
              laboratory={profile?.laboratory_name}
@@ -121,11 +121,11 @@ export function Dashboard({ initialAuth = false }: { initialAuth?: boolean }) {
           />
           <GeneCompare onChange={setLastMutation} />
         </div>
-        <div className="flex flex-col gap-6">
+         <div className="flex min-w-0 flex-col gap-6">
           <Charts rows={filtered} />
           <Insights rows={filtered} />
         </div>
-         <div className="lg:col-span-2">
+         <div className="min-w-0 lg:col-span-2">
            <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
              <span>Демонстрационные записи: {SEED_RECORDS.length}{user ? ` · Ваши замеры: ${cloudRows.length}` : ""}</span>
              {user && isFetching && <span>Загрузка замеров…</span>}

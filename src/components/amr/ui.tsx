@@ -5,7 +5,7 @@ import { STATUS_LABEL } from "@/lib/amr";
 
 export function Card({ title, icon, children, className }: { title: string; icon?: ReactNode; children: ReactNode; className?: string | undefined }) {
   return (
-    <section className={cn("rounded-2xl border bg-card p-5 shadow-[var(--shadow-card)] sm:p-6", className)}>
+    <section className={cn("min-w-0 rounded-2xl border bg-card p-5 shadow-[var(--shadow-card)] sm:p-6", className)}>
       <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground sm:text-lg">
         {icon && <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">{icon}</span>}
         <span className="min-w-0">{title}</span>
