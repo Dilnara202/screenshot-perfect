@@ -15,6 +15,13 @@
       "when": 1795797174376,
       "tag": "0001_profile_admin_creation_fallback",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795801520791,
+      "tag": "0002_clinical_platform",
+      "breakpoints": true
     }
   ]
 }

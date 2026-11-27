@@ -14,46 +14,146 @@ export type Database = {
   }
   public: {
     Tables: {
+      antibiotics: {
+        Row: {
+          created_at: string
+          disk_r: number | null
+          disk_s: number | null
+          drug_class: string
+          id: number
+          mic_r: number | null
+          mic_s: number | null
+          name: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          disk_r?: number | null
+          disk_s?: number | null
+          drug_class?: string
+          id?: never
+          mic_r?: number | null
+          mic_s?: number | null
+          name: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          disk_r?: number | null
+          disk_s?: number | null
+          drug_class?: string
+          id?: never
+          mic_r?: number | null
+          mic_s?: number | null
+          name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "antibiotics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       measurements: {
         Row: {
           antibiotic: string
           bacteria: string
+          biomaterial: string | null
+          city: string | null
           created_at: string
-          diameter_mm: number
+          diameter_mm: number | null
           id: number
           is_borderline: boolean
           location: string
+          method: string
+          mic_mgl: number | null
           mutation_summary: string
+          photo_path: string | null
           status: string
           user_id: string
         }
         Insert: {
           antibiotic: string
           bacteria: string
+          biomaterial?: string | null
+          city?: string | null
           created_at?: string
-          diameter_mm: number
+          diameter_mm?: number | null
           id?: never
           is_borderline: boolean
           location: string
+          method?: string
+          mic_mgl?: number | null
           mutation_summary?: string
+          photo_path?: string | null
           status: string
           user_id?: string
         }
         Update: {
           antibiotic?: string
           bacteria?: string
+          biomaterial?: string | null
+          city?: string | null
           created_at?: string
-          diameter_mm?: number
+          diameter_mm?: number | null
           id?: never
           is_borderline?: boolean
           location?: string
+          method?: string
+          mic_mgl?: number | null
           mutation_summary?: string
+          photo_path?: string | null
           status?: string
           user_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "measurements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pathogens: {
+        Row: {
+          created_at: string
+          family: string
+          gram: string
+          id: number
+          name: string
+          resistance_genes: string
+          user_id: string | null
+          who_priority: string
+        }
+        Insert: {
+          created_at?: string
+          family?: string
+          gram?: string
+          id?: never
+          name: string
+          resistance_genes?: string
+          user_id?: string | null
+          who_priority?: string
+        }
+        Update: {
+          created_at?: string
+          family?: string
+          gram?: string
+          id?: never
+          name?: string
+          resistance_genes?: string
+          user_id?: string | null
+          who_priority?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pathogens_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
