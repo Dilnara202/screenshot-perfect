@@ -9,6 +9,7 @@ import { Field, selectCls } from "./ui";
 export type AuthMode = "login" | "register" | "forgot";
 
 export function authError(error: { message: string; code?: string | undefined }) {
+  if (error.code === "email_address_invalid" || error.message.includes("This email address is not allowed")) return "Укажите действующий email: на тестовые адреса и домены с опечатками письма не отправляются";
   if (error.code === "invalid_credentials") return "Неверный email или пароль";
   if (error.code === "email_not_confirmed") return "Подтвердите email по ссылке в письме, затем войдите";
   if (error.code === "user_already_exists") return "Этот email уже зарегистрирован. Войдите в аккаунт";
