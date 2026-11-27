@@ -1,0 +1,26 @@
+CREATE TABLE public.profiles (id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE, laboratory_name text NOT NULL CHECK (char_length(trim(laboratory_name)) BETWEEN 1 AND 120));
+GRANT SELECT, UPDATE ON public.profiles TO authenticated;
+GRANT ALL ON public.profiles TO service_role;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY profiles_read_own ON public.profiles FOR SELECT TO authenticated USING (id = (select auth.uid()));
+CREATE POLICY profiles_update_own ON public.profiles FOR UPDATE TO authenticated USING (id = (select auth.uid())) WITH CHECK (id = (select auth.uid()));
+CREATE FUNCTION public.create_signup_profile() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ BEGIN INSERT INTO public.profiles(id, laboratory_name) VALUES (new.id, trim(new.raw_user_meta_data->>'laboratory_name')); RETURN new; END; $$;
+REVOKE EXECUTE ON FUNCTION public.create_signup_profile() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER create_signup_profile AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.create_signup_profile();
+CREATE TABLE public.measurements (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now(), user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES public.profiles(id) ON DELETE CASCADE, location text NOT NULL CHECK (char_length(trim(location)) BETWEEN 1 AND 120), bacteria text NOT NULL CHECK (bacteria IN ('E. coli','S. aureus','K. pneumoniae')), antibiotic text NOT NULL CHECK (antibiotic IN ('Амоксициллин','Ципрофлоксацин','Цефтриаксон')), diameter_mm numeric NOT NULL CHECK (diameter_mm BETWEEN 6 AND 40), status text NOT NULL CHECK (status IN ('S','I','R')), is_borderline boolean NOT NULL, mutation_summary text NOT NULL DEFAULT '—' CHECK (char_length(mutation_summary) <= 1000));
+GRANT SELECT, INSERT ON public.measurements TO authenticated;
+GRANT ALL ON public.measurements TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.measurements_id_seq TO authenticated, service_role;
+ALTER TABLE public.measurements ENABLE ROW LEVEL SECURITY;
+CREATE POLICY measurements_read_own ON public.measurements FOR SELECT TO authenticated USING (user_id = (select auth.uid()));
+CREATE POLICY measurements_insert_own ON public.measurements FOR INSERT TO authenticated WITH CHECK (user_id = (select auth.uid()));
+CREATE INDEX measurements_owner_created_idx ON public.measurements(user_id, created_at DESC);
+CREATE FUNCTION public.validate_measurement() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$ DECLARE r numeric; s numeric; BEGIN
+IF NEW.bacteria = 'S. aureus' THEN CASE NEW.antibiotic WHEN 'Амоксициллин' THEN r := 20; s := 29; WHEN 'Ципрофлоксацин' THEN r := 15; s := 21; WHEN 'Цефтриаксон' THEN r := 13; s := 21; ELSE RAISE EXCEPTION 'Invalid antibiotic'; END CASE;
+ELSIF NEW.bacteria IN ('E. coli','K. pneumoniae') THEN CASE NEW.antibiotic WHEN 'Амоксициллин' THEN r := 13; s := 17; WHEN 'Ципрофлоксацин' THEN r := 21; s := 26; WHEN 'Цефтриаксон' THEN r := 19; s := 23; ELSE RAISE EXCEPTION 'Invalid antibiotic'; END CASE;
+ELSE RAISE EXCEPTION 'Invalid bacteria'; END IF;
+NEW.location := trim(NEW.location);
+NEW.status := CASE WHEN NEW.diameter_mm <= r THEN 'R' WHEN NEW.diameter_mm >= s THEN 'S' ELSE 'I' END;
+NEW.is_borderline := abs(NEW.diameter_mm-r) <= 1.5 OR abs(NEW.diameter_mm-s) <= 1.5;
+NEW.created_at := now(); RETURN NEW; END; $$;
+CREATE TRIGGER validate_measurement BEFORE INSERT ON public.measurements FOR EACH ROW EXECUTE FUNCTION public.validate_measurement();

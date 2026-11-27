@@ -57,7 +57,8 @@ export function compareGenes(ref: string, sample: string): Mutation[] {
   const out: Mutation[] = [];
   for (let i = 0; i < ref.length; i++) {
     const s = sample[i] ?? "-";
-    if (s !== ref[i]) out.push({ pos: i + 1, from: ref[i]!, to: s, risk: riskFor(i + 1) });
+    const from = ref[i];
+    if (from !== undefined && s !== from) out.push({ pos: i + 1, from, to: s, risk: riskFor(i + 1) });
   }
   return out;
 }
@@ -66,7 +67,7 @@ export function compareGenes(ref: string, sample: string): Mutation[] {
 export type RecordRow = {
   id: number;
   date: string; // YYYY-MM-DD
-  site: Site;
+  site: string;
   bacterium: Bacterium;
   antibiotic: Antibiotic;
   diameter: number;

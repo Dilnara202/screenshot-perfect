@@ -28,3 +28,7 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+- Keep the public calculator and existing demo records accessible without authentication; private cloud measurements are owner-scoped by RLS.
+- Centralize verified auth state and the sole auth subscription in the root AuthProvider, so all sign-in affordances and private queries share one identity.
+- Validate measurement inputs with the shared Zod schema and database constraints; the database trigger derives status and borderline flags to prevent forged results.

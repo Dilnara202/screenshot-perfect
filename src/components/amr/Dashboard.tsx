@@ -1,18 +1,57 @@
-import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, BrainCircuit, ClipboardList, Dna, FlaskConical, Info, Save } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Activity, AlertTriangle, BrainCircuit, ClipboardList, Dna, FlaskConical, Info, Save, LogIn, LogOut, UserPlus, LoaderCircle } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { loadMeasurements, saveMeasurement } from "@/lib/cloud-measurements";
+import { useAmrAuth } from "./AuthProvider";
+import { AuthDialog, type AuthMode } from "./AuthDialog";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   ANTIBIOTICS, BACTERIA, BREAKPOINTS, MONTHS, REFERENCE, SCENARIOS, SEED_RECORDS, SITES,
-  analyze, classify, compareGenes, isBorderline, monthIndex,
-  type Antibiotic, type Bacterium, type RecordRow, type Site,
+  analyze, classify, compareGenes, isBorderline,
+  type Antibiotic, type Bacterium, type RecordRow,
 } from "@/lib/amr";
 import { cn } from "@/lib/utils";
 import { Card, Field, StatusBadge, selectCls } from "./ui";
 
 const ALL = "all";
 
-export function Dashboard() {
-  const [records, setRecords] = useState<RecordRow[]>(SEED_RECORDS);
+export function Dashboard({ initialAuth = false }: { initialAuth?: boolean }) {
+  const { user, ready } = useAmrAuth();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [authMode, setAuthMode] = useState<AuthMode | null>(initialAuth ? "login" : null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const { data: profile, error: profileError } = useQuery({
+    queryKey: ["profile", user?.id], enabled: ready && !!user,
+    queryFn: async ({ signal }) => {
+      if (!user) return null;
+      const { data, error } = await supabase.from("profiles").select("laboratory_name").eq("id", user.id).abortSignal(signal).single();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const { data: cloudRows = [], error: cloudError, isFetching, refetch } = useQuery({
+    queryKey: ["measurements", user?.id], enabled: ready && !!user,
+    queryFn: ({ signal }) => user ? loadMeasurements(user.id, signal) : Promise.resolve([]),
+  });
+  const records = user ? [...SEED_RECORDS, ...cloudRows.map((row) => ({ ...row, id: row.id + SEED_RECORDS.length }))] : SEED_RECORDS;
+  const sites = [...new Set([...SITES, ...(profile ? [profile.laboratory_name] : []), ...records.map((row) => row.site)])];
+  useEffect(() => { if (user) setAuthMode(null); }, [user]);
+  useEffect(() => { setSiteF(ALL); }, [user?.id]);
+  const signOut = async () => {
+    setSigningOut(true); setAccountError("");
+    try {
+      await queryClient.cancelQueries(); queryClient.clear();
+      const { error } = await supabase.auth.signOut();
+      if (error) { setAccountError("Не удалось выйти. Попробуйте снова"); return; }
+      await navigate({ to: "/auth", replace: true });
+    } catch { setAccountError("Не удалось выйти. Попробуйте снова"); }
+    finally { setSigningOut(false); }
+  };
   const [siteF, setSiteF] = useState<string>(ALL);
   const [bactF, setBactF] = useState<string>(ALL);
   const [lastMutation, setLastMutation] = useState("—");
@@ -36,11 +75,19 @@ export function Dashboard() {
                 <p className="text-sm text-muted-foreground">Система эпидемиологической и лабораторной аналитики</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[480px]">
+             <div className="flex min-w-0 flex-col gap-3 lg:w-[480px]">
+               <div className="flex flex-wrap items-center justify-end gap-2">
+                 {!ready ? <span className="text-sm text-muted-foreground">Проверка аккаунта…</span> : user ? <>
+                   <div className="min-w-0 flex-1 text-right text-sm"><p className="break-all font-medium">{user.email}</p><p className="break-words text-muted-foreground">{profile?.laboratory_name ?? (profileError ? "Не удалось загрузить лабораторию" : "Загрузка лаборатории…")}</p></div>
+                   <Button variant="outline" disabled={signingOut} onClick={signOut}><LogOut />Выйти</Button>
+                 </> : <><Button variant="outline" onClick={() => setAuthMode("login")}><LogIn />Войти</Button><Button onClick={() => setAuthMode("register")}><UserPlus />Регистрация</Button></>}
+               </div>
+               {accountError && <p role="alert" className="text-sm text-danger">{accountError}</p>}
+               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Пункт / Район">
                 <select aria-label="Фильтр: пункт" className={selectCls} value={siteF} onChange={(e) => setSiteF(e.target.value)}>
                   <option value={ALL}>Все пункты</option>
-                  {SITES.map((s) => <option key={s}>{s}</option>)}
+                   {sites.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </Field>
               <Field label="Бактерия">
@@ -49,6 +96,7 @@ export function Dashboard() {
                   {BACTERIA.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </Field>
+               </div>
             </div>
           </div>
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground/80">
@@ -61,7 +109,15 @@ export function Dashboard() {
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <MeasureForm
-            onSave={(row) => setRecords((prev) => [...prev, { ...row, id: prev.length + 1, mutation: lastMutation }])}
+             key={user?.id ?? "guest"}
+             laboratory={profile?.laboratory_name}
+             canSave={ready && !!user}
+             onLogin={() => setAuthMode("login")}
+             onSave={async (row) => {
+               if (!user) throw new Error("Sign in required");
+               await saveMeasurement({ ...row, mutation: lastMutation });
+               await queryClient.invalidateQueries({ queryKey: ["measurements", user.id] });
+             }}
           />
           <GeneCompare onChange={setLastMutation} />
         </div>
@@ -69,18 +125,30 @@ export function Dashboard() {
           <Charts rows={filtered} />
           <Insights rows={filtered} />
         </div>
-        <Journal rows={filtered} className="lg:col-span-2" />
+         <div className="lg:col-span-2">
+           <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+             <span>Демонстрационные записи: {SEED_RECORDS.length}{user ? ` · Ваши замеры: ${cloudRows.length}` : ""}</span>
+             {user && isFetching && <span>Загрузка замеров…</span>}
+             {user && cloudError && <><span role="alert" className="text-danger">Не удалось загрузить ваши замеры</span><Button variant="outline" size="sm" onClick={() => { void refetch(); }}>Повторить</Button></>}
+           </div>
+           <Journal rows={filtered} />
+         </div>
       </main>
+       <AuthDialog mode={authMode} onModeChange={setAuthMode} />
     </div>
   );
 }
 
-function MeasureForm({ onSave }: { onSave: (r: Omit<RecordRow, "id" | "mutation">) => void }) {
-  const [site, setSite] = useState<Site>(SITES[0]);
+function MeasureForm({ onSave, laboratory, canSave, onLogin }: { onSave: (r: Omit<RecordRow, "id" | "mutation" | "date">) => Promise<void>; laboratory: string | undefined; canSave: boolean; onLogin: () => void }) {
+  const [site, setSite] = useState<string>(SITES[0]);
+  const sites = [...new Set([...SITES, ...(laboratory ? [laboratory] : [])])];
+  useEffect(() => { if (laboratory) setSite(laboratory); }, [laboratory]);
   const [bact, setBact] = useState<Bacterium>(BACTERIA[0]);
   const [abx, setAbx] = useState<Antibiotic>(ANTIBIOTICS[0]);
   const [raw, setRaw] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const d = Number(raw);
   const valid = raw !== "" && Number.isFinite(d) && d >= 6 && d <= 40;
   const status = valid ? classify(bact, abx, d) : null;
@@ -90,22 +158,22 @@ function MeasureForm({ onSave }: { onSave: (r: Omit<RecordRow, "id" | "mutation"
     <Card title="Ввод и проверка замера (диско-диффузионный метод)" icon={<FlaskConical className="size-4" />}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Пункт / Район">
-          <select className={selectCls} value={site} onChange={(e) => setSite(e.target.value as Site)}>
-            {SITES.map((s) => <option key={s}>{s}</option>)}
+          <select disabled={saving} className={selectCls} value={site} onChange={(e) => { setSite(e.target.value); setSaved(false); }}>
+            {sites.map((s) => <option key={s}>{s}</option>)}
           </select>
         </Field>
         <Field label="Бактерия">
-          <select className={selectCls} value={bact} onChange={(e) => setBact(e.target.value as Bacterium)}>
+          <select disabled={saving} className={selectCls} value={bact} onChange={(e) => { setBact(e.target.value as Bacterium); setSaved(false); }}>
             {BACTERIA.map((s) => <option key={s}>{s}</option>)}
           </select>
         </Field>
         <Field label="Антибиотик">
-          <select className={selectCls} value={abx} onChange={(e) => setAbx(e.target.value as Antibiotic)}>
+          <select disabled={saving} className={selectCls} value={abx} onChange={(e) => { setAbx(e.target.value as Antibiotic); setSaved(false); }}>
             {ANTIBIOTICS.map((s) => <option key={s}>{s}</option>)}
           </select>
         </Field>
         <Field label="Диаметр зоны подавления, мм">
-          <input type="number" min={6} max={40} step={0.5} placeholder="6–40" className={selectCls} value={raw}
+          <input disabled={saving} type="number" min={6} max={40} step={0.5} placeholder="6–40" className={selectCls} value={raw}
             onChange={(e) => { setRaw(e.target.value); setSaved(false); }} />
         </Field>
       </div>
@@ -143,14 +211,21 @@ function MeasureForm({ onSave }: { onSave: (r: Omit<RecordRow, "id" | "mutation"
       </details>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button disabled={!valid} onClick={() => {
-          onSave({ date: new Date().toISOString().slice(0, 10).replace(/^\d{4}-(\d{2})/, (_m, mm) => Number(mm) > 6 ? "2026-06" : `2026-${mm}`), site, bacterium: bact, antibiotic: abx, diameter: d });
-          setRaw(""); setSaved(true);
+        <Button disabled={saving || (canSave && !valid)} onClick={async () => {
+          if (!canSave) { onLogin(); return; }
+          if (!valid || saving) return;
+          setSaving(true); setSaved(false); setSaveError("");
+          try {
+            await onSave({ site, bacterium: bact, antibiotic: abx, diameter: d });
+            setRaw(""); setSaved(true);
+          } catch { setSaveError("Не удалось сохранить замер. Проверьте соединение и попробуйте снова"); }
+          finally { setSaving(false); }
         }}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
-          <Save className="size-4" /> Сохранить замер в систему
-        </button>
-        {saved && <span className="text-sm text-success">Замер сохранён и добавлен в журнал</span>}
+          className="h-auto min-h-10 whitespace-normal text-left">
+          {saving ? <LoaderCircle className="animate-spin" /> : canSave ? <Save /> : <LogIn />}{saving ? "Сохранение…" : canSave ? "Сохранить замер в систему" : "Войти, чтобы сохранить замер"}
+        </Button>
+        {saved && <span role="status" className="text-sm text-success">Замер сохранён в облаке и добавлен в журнал</span>}
+        {saveError && <span role="alert" className="text-sm text-danger">{saveError}</span>}
       </div>
     </Card>
   );
@@ -193,7 +268,8 @@ function GeneCompare({ onChange }: { onChange: (m: string) => void }) {
       <Field label="Тестовый сценарий">
         <select className={selectCls} value={scenario} onChange={(e) => {
           setScenario(e.target.value);
-          update(SCENARIOS.find((s) => s.id === e.target.value)!.seq);
+          const selected = SCENARIOS.find((s) => s.id === e.target.value);
+          if (selected) update(selected.seq);
         }}>
           {SCENARIOS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
@@ -229,11 +305,12 @@ function GeneCompare({ onChange }: { onChange: (m: string) => void }) {
 const C_S = "var(--success)", C_I = "var(--warning)", C_R = "var(--danger)";
 
 function Charts({ rows }: { rows: RecordRow[] }) {
-  const monthly = MONTHS.map((m, i) => {
-    const rs = rows.filter((r) => monthIndex(r.date) === i);
+  const months = [...new Set([...MONTHS.map((_m, i) => `2026-${String(i + 1).padStart(2, "0")}`), ...rows.map((r) => r.date.slice(0, 7))])].sort();
+  const monthly = months.map((month) => {
+    const rs = rows.filter((r) => r.date.startsWith(month));
     const n = rs.length || 1;
     return {
-      month: m,
+      month: new Intl.DateTimeFormat("ru", { month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`)),
       "Устойчивые": Math.round((rs.filter((r) => classify(r.bacterium, r.antibiotic, r.diameter) === "R").length / n) * 100),
       "Пограничные": Math.round((rs.filter((r) => isBorderline(r.bacterium, r.antibiotic, r.diameter)).length / n) * 100),
     };
