@@ -72,6 +72,7 @@ export type RecordRow = {
   antibiotic: Antibiotic;
   diameter: number;
   mutation: string; // "—" если нет
+  photo?: string | null; // путь к фото в хранилище
 };
 
 export function monthIndex(date: string) {

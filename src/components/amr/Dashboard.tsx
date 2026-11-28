@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, Database, Activity, AlertTriangle, BrainCircuit, ClipboardList, Dna, FlaskConical, Info, Save, LogIn, LogOut, UserPlus, LoaderCircle } from "lucide-react";
+import { ArrowLeft, ImagePlus, Trash2, Database, Activity, AlertTriangle, BrainCircuit, ClipboardList, Dna, FlaskConical, Info, Save, LogIn, LogOut, UserPlus, LoaderCircle } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { loadMeasurements, saveMeasurement } from "@/lib/cloud-measurements";
+import { loadMeasurements, saveMeasurement, signedPhotoUrl, PHOTO_TYPES } from "@/lib/cloud-measurements";
 import { useAmrAuth } from "./AuthProvider";
 import { AuthDialog, type AuthMode } from "./AuthDialog";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -137,9 +137,9 @@ export function Dashboard({ initialAuth = false }: { initialAuth?: boolean }) {
               laboratory={profile?.laboratory_name}
               canSave={ready && !!user}
               onLogin={() => setAuthMode("login")}
-              onSave={async (row) => {
+              onSave={async (row, photo) => {
                 if (!user) throw new Error("Sign in required");
-                await saveMeasurement({ ...row, mutation: lastMutation });
+                await saveMeasurement({ ...row, mutation: lastMutation }, user.id, photo);
                 await queryClient.invalidateQueries({ queryKey: ["measurements", user.id] });
               }}
             />}
@@ -195,7 +195,7 @@ function Reference() {
   );
 }
 
-function MeasureForm({ onSave, laboratory, canSave, onLogin }: { onSave: (r: Omit<RecordRow, "id" | "mutation" | "date">) => Promise<void>; laboratory: string | undefined; canSave: boolean; onLogin: () => void }) {
+function MeasureForm({ onSave, laboratory, canSave, onLogin }: { onSave: (r: Omit<RecordRow, "id" | "mutation" | "date">, photo: File | null) => Promise<void>; laboratory: string | undefined; canSave: boolean; onLogin: () => void }) {
   const [site, setSite] = useState<string>(SITES[0]);
   const sites = [...new Set([...SITES, ...(laboratory ? [laboratory] : [])])];
   useEffect(() => { if (laboratory) setSite(laboratory); }, [laboratory]);
@@ -205,6 +205,17 @@ function MeasureForm({ onSave, laboratory, canSave, onLogin }: { onSave: (r: Omi
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoErr, setPhotoErr] = useState("");
+  const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const pickPhoto = (f: File | undefined) => {
+    setSaved(false); setPhotoErr("");
+    if (!f) return;
+    if (!PHOTO_TYPES.includes(f.type)) { setPhotoErr("Поддерживаются только JPG, PNG или WEBP"); return; }
+    if (f.size > 10 * 1024 * 1024) { setPhotoErr("Фото больше 10 МБ"); return; }
+    setPhoto(f);
+  };
   const d = Number(raw);
   const valid = raw !== "" && Number.isFinite(d) && d >= 6 && d <= 40;
   const status = valid ? classify(bact, abx, d) : null;
@@ -234,10 +245,27 @@ function MeasureForm({ onSave, laboratory, canSave, onLogin }: { onSave: (r: Omi
         </Field>
       </div>
 
+      <div className="mt-4 grid gap-3 rounded-xl border border-dashed p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+        {preview ? <img src={preview} alt="Фото чашки" className="size-28 rounded-lg border object-cover" /> : <div className="grid size-28 place-items-center rounded-lg bg-muted/60 text-muted-foreground"><ImagePlus className="size-7" /></div>}
+        <div className="flex min-w-0 flex-col gap-2 text-sm">
+          <span className="font-medium text-muted-foreground">Фото чашки / замера (необязательно)</span>
+          <div className="flex flex-wrap gap-2">
+            <label className={cn("inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-input px-3 font-medium hover:bg-accent", saving && "pointer-events-none opacity-50")}>
+              <ImagePlus className="size-4" />{photo ? "Заменить фото" : "Загрузить фото"}
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={saving} onChange={(e) => { pickPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+            </label>
+            {photo && <Button type="button" variant="outline" size="sm" className="h-9" disabled={saving} onClick={() => { setPhoto(null); setSaved(false); }}><Trash2 />Удалить фото</Button>}
+          </div>
+          {photo && <span className="truncate text-xs text-muted-foreground">{photo.name}</span>}
+          {photoErr && <span role="alert" className="text-xs text-danger">{photoErr}</span>}
+        </div>
+      </div>
+
       <div className="mt-4 flex min-h-14 flex-wrap items-center gap-3 rounded-xl bg-muted/60 p-3">
         {status ? <StatusBadge status={status} large /> : (
           <span className="text-sm text-muted-foreground">{raw === "" ? "Введите диаметр — результат появится сразу" : "Допустимый диапазон: 6–40 мм"}</span>
         )}
+        {status && preview && <img src={preview} alt="Фото к результату" className="ml-auto size-14 rounded-lg border object-cover" />}
       </div>
       {border && (
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-foreground">
@@ -272,8 +300,8 @@ function MeasureForm({ onSave, laboratory, canSave, onLogin }: { onSave: (r: Omi
           if (!valid || saving) return;
           setSaving(true); setSaved(false); setSaveError("");
           try {
-            await onSave({ site, bacterium: bact, antibiotic: abx, diameter: d });
-            setRaw(""); setSaved(true);
+            await onSave({ site, bacterium: bact, antibiotic: abx, diameter: d }, photo);
+            setRaw(""); setPhoto(null); setSaved(true);
           } catch { setSaveError("Не удалось сохранить замер. Проверьте соединение и попробуйте снова"); }
           finally { setSaving(false); }
         }}
@@ -455,7 +483,7 @@ function Journal({ rows, className }: { rows: RecordRow[]; className?: string })
         <table className="w-full min-w-[820px] text-left text-sm">
           <thead className="text-xs text-muted-foreground uppercase">
             <tr className="border-b">
-              {["Дата", "Пункт", "Бактерия", "Антибиотик", "Диаметр (мм)", "Статус", "Точность", "Мутация"].map((h) => <th key={h} className="px-2 py-2 font-medium">{h}</th>)}
+              {["Дата", "Пункт", "Бактерия", "Антибиотик", "Диаметр (мм)", "Статус", "Точность", "Мутация", "Фото"].map((h) => <th key={h} className="px-2 py-2 font-medium">{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -471,13 +499,21 @@ function Journal({ rows, className }: { rows: RecordRow[]; className?: string })
                   <td className="px-2"><StatusBadge status={classify(r.bacterium, r.antibiotic, r.diameter)} /></td>
                   <td className={cn("px-2", border ? "font-medium text-warning" : "text-muted-foreground")}>{border ? "Погранично" : "Норма"}</td>
                   <td className={cn("px-2 whitespace-nowrap", r.mutation !== "—" && "font-medium text-danger")}>{r.mutation}</td>
+                  <td className="px-2">{r.photo ? <JournalPhoto path={r.photo} /> : <span className="text-muted-foreground">—</span>}</td>
                 </tr>
               );
             })}
-            {sorted.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">Нет записей по выбранным фильтрам</td></tr>}
+            {sorted.length === 0 && <tr><td colSpan={9} className="py-6 text-center text-muted-foreground">Нет записей по выбранным фильтрам</td></tr>}
           </tbody>
         </table>
       </div>
     </Card>
   );
+}
+
+function JournalPhoto({ path }: { path: string }) {
+  const { data: url, isError } = useQuery({ queryKey: ["photo", path], queryFn: () => signedPhotoUrl(path), staleTime: 50 * 60 * 1000 });
+  if (isError) return <span className="text-xs text-danger">Ошибка</span>;
+  if (!url) return <span className="text-xs text-muted-foreground">…</span>;
+  return <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="Фото замера" className="size-10 rounded-md border object-cover" /></a>;
 }
