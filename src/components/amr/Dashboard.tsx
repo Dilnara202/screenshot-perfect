@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, BrainCircuit, ClipboardList, Dna, FlaskConical, Info, Save, LogIn, LogOut, UserPlus, LoaderCircle } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowLeft, Database, Activity, AlertTriangle, BrainCircuit, ClipboardList, Dna, FlaskConical, Info, Save, LogIn, LogOut, UserPlus, LoaderCircle } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,33 +61,66 @@ export function Dashboard({ initialAuth = false }: { initialAuth?: boolean }) {
     [records, siteF, bactF],
   );
 
+  const [view, setView] = useState<ModuleId | null>(null);
+  const current = MODULES.find((m) => m.id === view);
+  const showFilters = view === "charts" || view === "insights" || view === "journal";
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
-                <Activity className="size-6" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">АМР-Радар</h1>
-                <p className="text-sm text-muted-foreground">Система эпидемиологической и лабораторной аналитики</p>
-              </div>
+    <div className="min-h-screen bg-background bg-hero">
+      <header className="sticky top-0 z-20 border-b bg-background/85 backdrop-blur">
+        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:px-6">
+          <button type="button" onClick={() => setView(null)} className="flex min-w-0 items-center gap-3 text-left">
+            <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"><Activity className="size-5" /></span>
+            <span className="min-w-0">
+              <span className="block truncate text-xl font-bold tracking-tight text-foreground">АМР-Радар</span>
+              <span className="hidden truncate text-sm text-muted-foreground sm:block">Мониторинг антибиотикорезистентности</span>
+            </span>
+          </button>
+          <div className="flex items-center justify-end gap-2">
+            {!ready ? <span className="text-sm text-muted-foreground">Проверка аккаунта…</span> : user ? <>
+              <div className="hidden min-w-0 max-w-[260px] text-right text-sm sm:block"><p className="truncate font-medium">{user.email}</p><p className="truncate text-muted-foreground">{profile?.laboratory_name ?? (profileError ? "Не удалось загрузить лабораторию" : "Загрузка лаборатории…")}</p></div>
+              <Button variant="outline" disabled={signingOut} onClick={signOut}><LogOut />Выйти</Button>
+            </> : <><Button variant="outline" onClick={() => setAuthMode("login")}><LogIn />Войти</Button><Button onClick={() => setAuthMode("register")}><UserPlus /><span className="hidden sm:inline">Регистрация</span></Button></>}
+          </div>
+        </div>
+        {accountError && <p role="alert" className="mx-auto max-w-7xl px-4 pb-2 text-sm text-danger sm:px-6">{accountError}</p>}
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        {!current ? <>
+          <section className="animate-rise rounded-3xl border border-primary/15 bg-linear-to-br from-primary/10 via-card/60 to-card/30 p-6 shadow-[var(--shadow-card)] sm:p-10">
+            <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">Система эпидемиологической и лабораторной аналитики устойчивости бактерий к антибиотикам</h1>
+            <p className="mt-4 max-w-3xl text-base text-muted-foreground sm:text-lg">АМР-Радар объединяет диско-диффузионный метод, генетический анализ, визуальную аналитику трендов и автоматические рекомендации в едином рабочем пространстве для лабораторий и эпидемиологов.</p>
+            <div className="mt-6 flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground/85">
+              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span>Аналитический инструмент поддержки решений и мониторинга данных (не является медицинским изделием и не ставит диагнозы)</span>
             </div>
-             <div className="flex min-w-0 flex-col gap-3 lg:w-[480px]">
-               <div className="flex flex-wrap items-center justify-end gap-2">
-                 {!ready ? <span className="text-sm text-muted-foreground">Проверка аккаунта…</span> : user ? <>
-                   <div className="min-w-0 flex-1 text-right text-sm"><p className="break-all font-medium">{user.email}</p><p className="break-words text-muted-foreground">{profile?.laboratory_name ?? (profileError ? "Не удалось загрузить лабораторию" : "Загрузка лаборатории…")}</p></div>
-                   <Button variant="outline" disabled={signingOut} onClick={signOut}><LogOut />Выйти</Button>
-                 </> : <><Button variant="outline" onClick={() => setAuthMode("login")}><LogIn />Войти</Button><Button onClick={() => setAuthMode("register")}><UserPlus />Регистрация</Button></>}
-               </div>
-               {accountError && <p role="alert" className="text-sm text-danger">{accountError}</p>}
-               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          </section>
+          <h2 className="mt-10 mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase">Модули системы</h2>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {MODULES.map((m) => (
+              <button key={m.id} type="button" onClick={() => setView(m.id)} className={cn("animate-rise group flex min-h-56 flex-col rounded-3xl border p-6 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-1 hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring outline-hidden", m.tone)}>
+                <span className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
+                  <span className="grid size-12 shrink-0 place-items-center rounded-full bg-background/60 text-primary">{m.icon}</span>
+                  <span className="min-w-0 text-right text-sm font-medium text-muted-foreground">{m.tag}</span>
+                </span>
+                <span className="mt-5 text-lg font-bold text-foreground">{m.title}</span>
+                <span className="mt-2 text-sm leading-relaxed text-muted-foreground">{m.text}</span>
+              </button>
+            ))}
+          </div>
+        </> : <>
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <Button variant="ghost" size="sm" onClick={() => setView(null)} className="-ml-2 mb-2"><ArrowLeft />Все модули</Button>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{current.title}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{current.tag}</p>
+            </div>
+            {showFilters && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[480px]">
               <Field label="Пункт / Район">
                 <select aria-label="Фильтр: пункт" className={selectCls} value={siteF} onChange={(e) => setSiteF(e.target.value)}>
                   <option value={ALL}>Все пункты</option>
-                   {sites.map((s) => <option key={s}>{s}</option>)}
+                  {sites.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </Field>
               <Field label="Бактерия">
@@ -96,46 +129,69 @@ export function Dashboard({ initialAuth = false }: { initialAuth?: boolean }) {
                   {BACTERIA.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </Field>
-               </div>
-            </div>
+            </div>}
           </div>
-          <div className="mt-4 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground/80">
-            <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-            <span>Аналитический инструмент поддержки решений и мониторинга данных (не является медицинским изделием и не ставит диагнозы)</span>
+          <div className="max-w-5xl">
+            {view === "measure" && <MeasureForm
+              key={user?.id ?? "guest"}
+              laboratory={profile?.laboratory_name}
+              canSave={ready && !!user}
+              onLogin={() => setAuthMode("login")}
+              onSave={async (row) => {
+                if (!user) throw new Error("Sign in required");
+                await saveMeasurement({ ...row, mutation: lastMutation });
+                await queryClient.invalidateQueries({ queryKey: ["measurements", user.id] });
+              }}
+            />}
+            {view === "gene" && <GeneCompare onChange={setLastMutation} />}
+            {view === "charts" && <Charts rows={filtered} />}
+            {view === "insights" && <Insights rows={filtered} />}
+            {view === "journal" && <>
+              <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <span>Демонстрационные записи: {SEED_RECORDS.length}{user ? ` · Ваши замеры: ${cloudRows.length}` : ""}</span>
+                {user && isFetching && <span>Загрузка замеров…</span>}
+                {user && cloudError && <><span role="alert" className="text-danger">Не удалось загрузить ваши замеры</span><Button variant="outline" size="sm" onClick={() => { void refetch(); }}>Повторить</Button></>}
+              </div>
+              <Journal rows={filtered} />
+            </>}
+            {view === "reference" && <Reference />}
           </div>
-        </div>
-      </header>
-
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2">
-         <div className="flex min-w-0 flex-col gap-6">
-          <MeasureForm
-             key={user?.id ?? "guest"}
-             laboratory={profile?.laboratory_name}
-             canSave={ready && !!user}
-             onLogin={() => setAuthMode("login")}
-             onSave={async (row) => {
-               if (!user) throw new Error("Sign in required");
-               await saveMeasurement({ ...row, mutation: lastMutation });
-               await queryClient.invalidateQueries({ queryKey: ["measurements", user.id] });
-             }}
-          />
-          <GeneCompare onChange={setLastMutation} />
-        </div>
-         <div className="flex min-w-0 flex-col gap-6">
-          <Charts rows={filtered} />
-          <Insights rows={filtered} />
-        </div>
-         <div className="min-w-0 lg:col-span-2">
-           <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-             <span>Демонстрационные записи: {SEED_RECORDS.length}{user ? ` · Ваши замеры: ${cloudRows.length}` : ""}</span>
-             {user && isFetching && <span>Загрузка замеров…</span>}
-             {user && cloudError && <><span role="alert" className="text-danger">Не удалось загрузить ваши замеры</span><Button variant="outline" size="sm" onClick={() => { void refetch(); }}>Повторить</Button></>}
-           </div>
-           <Journal rows={filtered} />
-         </div>
+        </>}
       </main>
-       <AuthDialog mode={authMode} onModeChange={setAuthMode} />
+      <AuthDialog mode={authMode} onModeChange={setAuthMode} />
     </div>
+  );
+}
+
+type ModuleId = "measure" | "gene" | "charts" | "insights" | "journal" | "reference";
+const MODULES: { id: ModuleId; title: string; tag: string; text: string; icon: ReactNode; tone: string }[] = [
+  { id: "measure", title: "Диско-диффузионный метод", tag: "Ввод и проверка замера", text: "Введите диаметр зоны подавления роста — система мгновенно классифицирует результат (S/I/R) и проверит пограничные значения.", icon: <FlaskConical className="size-5" />, tone: "border-primary/20 bg-linear-to-br from-primary/12 to-card/40" },
+  { id: "gene", title: "Сравнение гена с эталоном", tag: "Поиск мутаций", text: "Сравните нуклеотидную последовательность образца с эталоном и найдите мутации-маркеры устойчивости.", icon: <Dna className="size-5" />, tone: "border-chart-5/25 bg-linear-to-br from-chart-5/12 to-card/40" },
+  { id: "charts", title: "Визуальная аналитика и тренды", tag: "Графики и статистика", text: "Динамика устойчивости по месяцам, распределение по статусам S/I/R, выявление трендов.", icon: <Activity className="size-5" />, tone: "border-success/20 bg-linear-to-br from-success/10 to-card/40" },
+  { id: "insights", title: "Автоматический вывод", tag: "Причина и решения", text: "Система анализирует данные и формирует вероятную причину тренда + рекомендуемые действия.", icon: <BrainCircuit className="size-5" />, tone: "border-warning/20 bg-linear-to-br from-warning/8 to-card/40" },
+  { id: "journal", title: "Журнал наблюдений", tag: "История замеров", text: "Полная таблица всех замеров с фильтрами по пункту и бактерии, статусами и мутациями.", icon: <ClipboardList className="size-5" />, tone: "border-warning/20 bg-linear-to-br from-warning/8 to-card/40" },
+  { id: "reference", title: "Справочник бактерий и антибиотиков", tag: "База данных", text: "Просмотр пороговых значений зон подавления для бактерий и антибиотиков.", icon: <Database className="size-5" />, tone: "border-primary/20 bg-linear-to-br from-primary/10 to-card/40" },
+];
+
+function Reference() {
+  return (
+    <Card title="Пороговые значения (диаметр зоны, мм)" icon={<Database className="size-4" />}>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 pr-3 font-medium">Бактерия</th><th className="py-2 pr-3 font-medium">Антибиотик</th><th className="py-2 pr-3 font-medium">S, ≥</th><th className="py-2 font-medium">R, ≤</th></tr></thead>
+          <tbody>
+            {BACTERIA.flatMap((b) => ANTIBIOTICS.map((a) => (
+              <tr key={b + a} className="border-b last:border-0">
+                <td className="py-2 pr-3 italic">{b}</td><td className="py-2 pr-3">{a}</td>
+                <td className="py-2 pr-3 tabular-nums text-success">{BREAKPOINTS[b][a].s}</td>
+                <td className="py-2 tabular-nums text-danger">{BREAKPOINTS[b][a].r}</td>
+              </tr>
+            )))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">Ориентировочные значения для демонстрации; сверяйтесь с актуальными таблицами EUCAST.</p>
+    </Card>
   );
 }
 
